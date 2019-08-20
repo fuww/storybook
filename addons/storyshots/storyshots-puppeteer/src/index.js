@@ -34,8 +34,20 @@ export const imageSnapshot = (customConfig = {}) => {
     getCustomBrowser,
   } = { ...defaultConfig, ...customConfig };
 
+  let browserPromise;
   let browser; // holds ref to browser. (ie. Chrome)
-  let page; // Hold ref to the page to screenshot.
+
+  const getBrowser = async () => {
+    if (getCustomBrowser) {
+      return await getCustomBrowser();
+    } else {
+      // add some options "no-sandbox" to make it work properly on some Linux systems as proposed here: https://github.com/Googlechrome/puppeteer/issues/290#issuecomment-322851507
+      return await puppeteer.launch({
+        args: ['--no-sandbox ', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        executablePath: chromeExecutablePath,
+      });
+    }
+  };
 
   const testFn = async ({ context }) => {
     const { kind, framework, name } = context;
@@ -48,16 +60,9 @@ export const imageSnapshot = (customConfig = {}) => {
       return;
     }
     const url = constructUrl(storybookUrl, kind, name);
-
-    if (!browser || !page) {
-      logger.error(
-        `Error when generating image snapshot for test ${kind} - ${name} : It seems the headless browser is not running.`
-      );
-
-      throw new Error('no-headless-browser-running');
-    }
-
-    expect.assertions(1);
+    browserPromise = browserPromise || getBrowser();
+    browser = browser || await browserPromise;
+    const page = await browser.newPage();
 
     let image;
     try {
@@ -74,28 +79,12 @@ export const imageSnapshot = (customConfig = {}) => {
     }
 
     expect(image).toMatchImageSnapshot(getMatchOptions({ context, url }));
+
+    await page.close();
   };
 
-  testFn.afterAll = () => {
-    if (getCustomBrowser && page) {
-      return page.close();
-    }
-
-    return browser.close();
-  };
-
-  testFn.beforeAll = async () => {
-    if (getCustomBrowser) {
-      browser = await getCustomBrowser();
-    } else {
-      // add some options "no-sandbox" to make it work properly on some Linux systems as proposed here: https://github.com/Googlechrome/puppeteer/issues/290#issuecomment-322851507
-      browser = await puppeteer.launch({
-        args: ['--no-sandbox ', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-        executablePath: chromeExecutablePath,
-      });
-    }
-
-    page = await browser.newPage();
+  testFn.afterAll = async () => {
+    return browser && await browser.close();
   };
 
   return testFn;

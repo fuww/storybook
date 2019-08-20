@@ -6,7 +6,7 @@ function snapshotTest({ item, asyncJest, framework, testMethod, testMethodParams
   const context = { ...item, framework };
 
   if (asyncJest === true) {
-    it(name, done =>
+    it.concurrent(name, done =>
       testMethod({
         done,
         story: item,
@@ -15,7 +15,7 @@ function snapshotTest({ item, asyncJest, framework, testMethod, testMethodParams
       })
     );
   } else {
-    it(name, () =>
+    it.concurrent(name, () =>
       testMethod({
         story: item,
         context,
